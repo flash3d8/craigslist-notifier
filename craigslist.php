@@ -6,6 +6,8 @@
  * @version 1.0
  */
 
+namespace waffley;
+
 // Config.
 $config = array();
 $config['cities'] = array(
@@ -33,7 +35,7 @@ $config['cities'] = array(
 	  'subdomain' => 'spacecoast',
 	  'distance' => 169
     ),
-    'Sarasota-bradenton, FL' => array(
+    'Sarasota-Bradenton, FL' => array(
 	  'subdomain' => 'sarasota',
 	  'distance' => 170
     ),
@@ -74,13 +76,26 @@ $config['cities'] = array(
 	  'distance' => 319
     ),
 );
+if (isset($_GET['debug'])) {
+	$config['debug'] = $_GET['debug'];
+}
 
 require_once('config.php');
+
+function log($msg) {
+	global $config;
+	if ($config['log_level'] == 'verbose') {
+		echo $msg . "\n";
+	}
+}
+
+log('Starting search. Setting php runtime config.');
 
 ini_set('max_execution_time', $config['max_execution']);
 
 // Decides where error output goes.
 function reportError($message, $data = false, $stop_exit = false) {
+	global $config;
 	$message .= "\n";
 	echo $message;
 	// $stderr = fopen('php://stderr', 'w');
@@ -101,8 +116,13 @@ $new_cache = array();
 $first_run = false;
 $cache_fn = $config['data_folder'] . '/cache.txt';
 if (!file_exists($cache_fn)) {
-	mkdir($config['data_folder']);
-	chmod($config['data_folder'], 0777);
+	log('Cache file does not exist.');
+	if (!file_exists($config['data_folder'])) {
+		log('Data folder does not exist.');
+		mkdir($config['data_folder']);
+		chmod($config['data_folder'], 0777);
+	}
+	log('Creating cache file.');
 	if (!touch($cache_fn)) {
 		reportError('Cache file cannot be created.');
 	}
@@ -114,14 +134,17 @@ else if (!is_readable($cache_fn)) {
 }
 else {
 	$cache = (array) @json_decode(file_get_contents($cache_fn));
+	log('Cache contents: ' . print_r($cache, true));
 	if (!count($cache)) {
-		reportError('Cache is empty (unusual).');
+		reportError('Cache is empty (unusual).', null, true);
 	}
 	
 	// Sleep random interval.
 	if (ini_get('max_execution_time') == $config['max_execution']) {
-		if (!$_GET['debug']) {
-			sleep(mt_rand(0, $config['start_delay']));
+		if (!$config['debug']) {
+			$start_delay = mt_rand(0, $config['start_delay']);
+			log('Start delay: ' . $start_delay);
+			sleep($start_delay);
 		}
 	}
 	else {
@@ -133,6 +156,7 @@ else {
 $new_posts = array();
 $delay_remainder = 0;
 $standard_page_delay = round(($config['total_delay'] - $config['start_delay']) / count($config['cities']));
+log('Standard page delay: ' . $standard_page_delay);
 foreach ($config['cities'] as $city_name => $city) {
 	// Calculate semi-random delays between page visits.
 	if (end($config['cities']) != $city) {
@@ -142,20 +166,24 @@ foreach ($config['cities'] as $city_name => $city) {
 		$random_delay = $standard_page_delay;
 	}
 	$page_delay = $random_delay + $delay_remainder;
+	log('Page delay: ' . $page_delay);
 	if ($page_delay < $standard_page_delay) {
 		$delay_remainder = $standard_page_delay - $page_delay;
+		log('Delay remainder: ' . $delay_remainder);
 	}
-	if (!$_GET['debug']) {
+	if (!$config['debug']) {
 		sleep($page_delay);
 	}
 	
 	// Skip cities too far away.
 	if ($city['distance'] > $config['search_distance']) {
+		log('Skipping city because outside search radius: ' . $city['distance'] . ' / ' . $config['search_distance']);
 		continue;
 	}
 	
 	$url_base = str_replace('[subdomain]', $city['subdomain'], $config['url_base']);
 	$url = $url_base . $config['url_path'];
+	log('Fetching URL: ' . $url);
 	$ch = curl_init();
 	curl_setopt($ch, CURLOPT_URL, $url);
 	curl_setopt($ch, CURLOPT_USERAGENT, $config['user_agent']);
@@ -182,12 +210,12 @@ foreach ($config['cities'] as $city_name => $city) {
 	}
 	
 	if ($config['verbose']) {
-		$last_index_fn = $config['data_folder'] . '/index_' . $city['subdomain'] . '.txt';
+		$last_index_fn = $config['data_folder'] . '/index_' . $city['subdomain'] . '.html';
 		file_put_contents($last_index_fn, $request_data . $index_data);
 		chmod($last_index_fn, 0776);
 	}
 	
-	$pattern = '/<p\s+class="row"\s+data-pid="(\d+)">.+?(?:<a[^>]+?data-id="0:([^"]+)".+?)?<time\s+datetime="([^"]+)"\s+title="([^"]+)".+?<a.+?href="([^"]+)"[^>]+>([^<]+).+?<small>\s*\(([^)]+)/i';
+	$pattern = '/<p\s+class="row"\s+data-pid="(\d+)">.+?(?:<a[^>]+?data-ids="([^"]+)".+?)?<time\s+datetime="([^"]+)"\s+title="([^"]+)".+?<a.+?href="([^"]+)"[^>]+>([^<]+).+?(?:<small>\s*\(([^)]+).+?)?<\/p>/i';
 	$match_result = preg_match_all($pattern, $index_data, $matches);
 	if ($match_result  === false) {
 		reportError('Failed to match pattern: ' . $url, $index_data);
@@ -195,10 +223,12 @@ foreach ($config['cities'] as $city_name => $city) {
 	if (!$match_result || !count($matches[0])) {
 		reportError('No matches in the results: ' . $url, $index_data);
 	}
+	log('Macthes: ' . print_r($matches));
 	
+	log('Filtering posts: ' . count($matches[0]));
 	for ($i = 0; $i < count($matches[0]); $i++) {
 		$post_id = $matches[1][$i];
-		$post_image_id = $matches[2][$i];
+		$post_image_ids = $matches[2][$i];
 		$post_date = $matches[3][$i];
 		$post_date_str = $matches[4][$i];
 		$post_url = $matches[5][$i];
@@ -206,25 +236,40 @@ foreach ($config['cities'] as $city_name => $city) {
 		$post_location = $matches[7][$i];
 		
 		// If post is too old.
-		$post_datetime = new DateTime($post_date);
-		$post_interval = $post_datetime->diff(new DateTime('now'));
-		if ($config['days_old'] <= $post_interval->format('%a')) {
+		$post_datetime = new \DateTime($post_date);
+		$post_interval = $post_datetime->diff(new \DateTime('now'))->format('%a');
+		if ($config['days_old'] <= $post_interval) {
+			log('Post too old: ' . $config['days_old'] . ' / ' . $post_interval . ' / ' . $post_id);
 			continue;
 		}
+
+		$new_cache[] = $post_id;
 		
 		// If already notified about this post.
-		if ((in_array($post_id, $cache) || in_array($post_id, $new_cache)) && !isset($_GET['full'])) {
-			$new_cache[] = $post_id;
-			continue;
+		if (!isset($_GET['full'])) {
+			if (in_array($post_id, $cache)) {
+				log('Post already in cache: ' . $post_id);
+				continue;
+			}
+			if (in_array($post_id, $new_cache)) {
+				log('Post already found in another site: ' . $post_id);
+				continue;
+			}
 		}
 		
-		if (!strstr($post_url, 'http')) {
+		if (!strstr($post_url, '//')) {
 			$post_url = $url_base . $post_url;
 		}
 		
 		preg_match('/http:\/\/([^\.]+)\./', $post_url, $post_city);
+
+		$post_images = [];
+		if (strlen($post_image_ids)) {
+			$post_images = array_map(function($val) {
+				return 'http://images.craigslist.org/' . substr(trim($val), 2) . '_600x450.jpg';
+			}, explode(',', $post_image_ids));
+		}
 		
-		$new_cache[] = $post_id;
 		$new_posts[$post_id] = array(
 		    'time' => $post_datetime,
 		    'time_str' => $post_date_str,
@@ -233,36 +278,50 @@ foreach ($config['cities'] as $city_name => $city) {
 		    'location' => $post_location,
 		    'site' => $post_city[1],
 		    'distance' => $city['distance'],
-		    'image' => ($post_image_id)? 'http://images.craigslist.org/' . $post_image_id . '_600x450.jpg' : false
+		    'images' => $post_images
 		);
 	}
 }
+log('Posts macthed: ' . print_r($new_posts, true));
+log('Posts cached: ' . print_r($new_cache, true));
 
 if (!(@file_put_contents($cache_fn, json_encode($new_cache)))) {
 	reportError('Could not save cache.', false, true);
 }
 
 if ($first_run && !isset($_GET['test'])) {
+	log('Exiting due to first run, building cache.');
 	exit;
 }
 else if (isset($_GET['test'])) {
+	log('Exiting due to test mode. Skipping notifications');
 	die(json_encode($new_posts));
 }
 
 // Notify about new posts.
+log('Starting notifications.');
+$mail_log = $config['data_folder'] . '/mail.log';
+if (!file_exists($mail_log)) {
+	log('Mail log not does not exist. Creating.');
+	touch($mail_log);
+	chmod($mail_log, 0776);
+}
 foreach($new_posts as $post) {
 	$message = '';
-	if ($post['image']) {
-		$message .= "<a href='{$post['url']}'><img src='{$post['image']}' /></a>";
+	$message .= "<br />Time: {$post['time_str']}<br />"
+				. "Site: {$post['site']}<br />"
+				. "Distance: {$post['distance']}<br />"
+				. "Location: {$post['location']}<br />"
+				. '<br />';
+	if ($post['images']) {
+		foreach($post['images'] as $image) {
+			$message .= "<a href='{$post['url']}'><img src='{$image}' /></a>";
+		}
 	}
 	else {
 		$message .= "<a href='{$post['url']}'>{$post['url']}</a>";
 	}
-	$message .= "<br />Time: {$post['time_str']}<br />"
-				. "Site: {$post['site']}<br />"
-				. "Distance: {$post['distance']}<br />"
-				. "Location: {$post['location']}<br />";
-	$mail_log = $config['data_folder'] . '/mail.log';
+	
 	$subject = 'CL: ' . $post['title'];
 	$log_entry =	'Subject: ' . $subject . "\n" .
 				'Date: ' . date('r') . "\n" .
@@ -271,7 +330,6 @@ foreach($new_posts as $post) {
 	if (!(@file_put_contents($mail_log, $log_entry, FILE_APPEND))) {
 		reportError('Could not write to mail log: ' . $subject, $message);
 	}
-	chmod($mail_log, 0776);
 	if (!mail($config['notify_email'], $subject, $message,	"From: CL Notifier <{$config['from_email']}>\r\n" .
 										"MIME-Version: 1.0\r\n" . 
 										"Content-type: text/html; charset=iso-8859-1\r\n")) {
