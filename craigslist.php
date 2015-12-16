@@ -146,7 +146,7 @@ else {
 		if (!$config['debug']) {
 			$start_delay = mt_rand(0, $config['start_delay']);
 			log('Start delay: ' . $start_delay);
-			//sleep($start_delay);
+			sleep($start_delay);
 		}
 	}
 	else {
@@ -174,8 +174,7 @@ foreach ($config['cities'] as $city_name => $city) {
 		log('Delay remainder: ' . $delay_remainder);
 	}
 	if (!$config['debug']) {
-		//sleep($page_delay);
-		sleep(2);
+		sleep($page_delay);
 	}
 	
 	// Skip cities too far away.
