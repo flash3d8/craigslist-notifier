@@ -14,7 +14,6 @@ $config['total_delay'] = 400;
 $config['start_delay'] = 150;
 $config['data_folder'] = 'cl_data';
 $config['user_agent'] = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2062.120 Safari/537.36';
-$config['verbose'] = true;
 $config['log_level'] = 'verbose';
 $config['debug'] = false;
 

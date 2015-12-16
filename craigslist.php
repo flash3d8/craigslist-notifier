@@ -82,6 +82,8 @@ if (isset($_GET['debug'])) {
 
 require_once('config.php');
 
+$config['data_folder'] = __DIR__ . '/' . $config['data_folder'];
+
 function log($msg) {
 	global $config;
 	if ($config['log_level'] == 'verbose') {
@@ -144,7 +146,7 @@ else {
 		if (!$config['debug']) {
 			$start_delay = mt_rand(0, $config['start_delay']);
 			log('Start delay: ' . $start_delay);
-			sleep($start_delay);
+			//sleep($start_delay);
 		}
 	}
 	else {
@@ -172,7 +174,8 @@ foreach ($config['cities'] as $city_name => $city) {
 		log('Delay remainder: ' . $delay_remainder);
 	}
 	if (!$config['debug']) {
-		sleep($page_delay);
+		//sleep($page_delay);
+		sleep(2);
 	}
 	
 	// Skip cities too far away.
@@ -199,7 +202,7 @@ foreach ($config['cities'] as $city_name => $city) {
 	    'Accept-Encoding: gzip,deflate,sdch',
 	    'Accept-Language: en-US,en;q=0.8',
 	));
-	if ($config['verbose']) {
+	if ($config['log_level'] == 'verbose') {
 		curl_setopt($ch, CURLINFO_HEADER_OUT, true);
 	}
 	$index_data = curl_exec($ch);
@@ -209,7 +212,7 @@ foreach ($config['cities'] as $city_name => $city) {
 		reportError('Failed to get post index: ' . $url);
 	}
 	
-	if ($config['verbose']) {
+	if ($config['log_level'] == 'verbose') {
 		$last_index_fn = $config['data_folder'] . '/index_' . $city['subdomain'] . '.html';
 		file_put_contents($last_index_fn, $request_data . $index_data);
 		chmod($last_index_fn, 0776);
@@ -220,13 +223,14 @@ foreach ($config['cities'] as $city_name => $city) {
 	if ($match_result  === false) {
 		reportError('Failed to match pattern: ' . $url, $index_data);
 	}
-	if (!$match_result || !count($matches[0])) {
+	if (!$match_result || !count($matches[1])) {
 		reportError('No matches in the results: ' . $url, $index_data);
 	}
+	unset($matches[0]);
 	log('Macthes: ' . print_r($matches));
 	
-	log('Filtering posts: ' . count($matches[0]));
-	for ($i = 0; $i < count($matches[0]); $i++) {
+	log('Filtering posts: ' . count($matches[1]));
+	for ($i = 0; $i < count($matches[1]); $i++) {
 		$post_id = $matches[1][$i];
 		$post_image_ids = $matches[2][$i];
 		$post_date = $matches[3][$i];
@@ -242,24 +246,29 @@ foreach ($config['cities'] as $city_name => $city) {
 			log('Post too old: ' . $config['days_old'] . ' / ' . $post_interval . ' / ' . $post_id);
 			continue;
 		}
-
-		$new_cache[] = $post_id;
 		
 		// If already notified about this post.
-		if (!isset($_GET['full'])) {
+		if (!isset($config['cache_disabled']) || $config['cache_disabled'] == true) {
 			if (in_array($post_id, $cache)) {
 				log('Post already in cache: ' . $post_id);
+				$new_cache[] = $post_id;
 				continue;
 			}
 			if (in_array($post_id, $new_cache)) {
 				log('Post already found in another site: ' . $post_id);
+				$new_cache[] = $post_id;
 				continue;
 			}
 		}
+		log('Post passed filters: ' . $post_id);
 		
 		if (!strstr($post_url, '//')) {
-			$post_url = $url_base . $post_url;
+			$fixed_post_url = $url_base . $post_url;
 		}
+		else {
+			$fixed_post_url = 'http:' . $post_url;
+		}
+		log('URL fix: ' . $post_url . ' / ' . $fixed_post_url);
 		
 		preg_match('/http:\/\/([^\.]+)\./', $post_url, $post_city);
 
@@ -270,10 +279,11 @@ foreach ($config['cities'] as $city_name => $city) {
 			}, explode(',', $post_image_ids));
 		}
 		
+		$new_cache[] = $post_id;
 		$new_posts[$post_id] = array(
 		    'time' => $post_datetime,
 		    'time_str' => $post_date_str,
-		    'url' => $post_url,
+		    'url' => $fixed_post_url,
 		    'title' => $post_title,
 		    'location' => $post_location,
 		    'site' => $post_city[1],
@@ -289,11 +299,11 @@ if (!(@file_put_contents($cache_fn, json_encode($new_cache)))) {
 	reportError('Could not save cache.', false, true);
 }
 
-if ($first_run && !isset($_GET['test'])) {
+if ($first_run && !isset($config['debug'])) {
 	log('Exiting due to first run, building cache.');
 	exit;
 }
-else if (isset($_GET['test'])) {
+else if (isset($config['debug']) && $config['debug'] == true) {
 	log('Exiting due to test mode. Skipping notifications');
 	die(json_encode($new_posts));
 }
