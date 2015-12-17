@@ -255,7 +255,6 @@ foreach ($config['cities'] as $city_name => $city) {
 			}
 			if (in_array($post_id, $new_cache)) {
 				log('Post already found in another site: ' . $post_id);
-				$new_cache[] = $post_id;
 				continue;
 			}
 		}
@@ -298,11 +297,13 @@ if (!(@file_put_contents($cache_fn, json_encode($new_cache)))) {
 	reportError('Could not save cache.', false, true);
 }
 
-if ($first_run && !isset($config['debug'])) {
-	log('Exiting due to first run, building cache.');
-	exit;
+if (!isset($config['debug']) || $config['debug'] == false) {
+	if ($first_run) {
+		log('Exiting due to first run, building cache.');
+		exit;
+	}
 }
-else if (isset($config['debug']) && $config['debug'] == true) {
+else {
 	log('Exiting due to test mode. Skipping notifications');
 	die(json_encode($new_posts));
 }
@@ -315,20 +316,24 @@ if (!file_exists($mail_log)) {
 	touch($mail_log);
 	chmod($mail_log, 0776);
 }
-foreach($new_posts as $post) {
+foreach ($new_posts as $post) {
+	log('Starting message.');
 	$message = '';
 	$message .= "<br />Time: {$post['time_str']}<br />"
 				. "Site: {$post['site']}<br />"
 				. "Distance: {$post['distance']}<br />"
 				. "Location: {$post['location']}<br />"
 				. '<br />';
+	
 	if ($post['images']) {
 		foreach($post['images'] as $image) {
 			$message .= "<a href='{$post['url']}'><img src='{$image}' /></a>";
 		}
+		log('Images found.');
 	}
 	else {
 		$message .= "<a href='{$post['url']}'>{$post['url']}</a>";
+		log('No images found.');
 	}
 	
 	$subject = 'CL: ' . $post['title'];
@@ -336,6 +341,7 @@ foreach($new_posts as $post) {
 				'Date: ' . date('r') . "\n" .
 				'Message: ' . $message . "\n" .
 				 str_repeat('_', 50) . "\n";
+	log('Message (' . $subject . '): ' . $message);
 	if (!(@file_put_contents($mail_log, $log_entry, FILE_APPEND))) {
 		reportError('Could not write to mail log: ' . $subject, $message);
 	}
