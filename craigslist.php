@@ -11,68 +11,68 @@ namespace waffley;
 // Config.
 $config = array();
 $config['cities'] = array(
-    'Miami / South Florida, FL' => array(
-	  'subdomain' => 'miami',
+    'miami' => array(
+	  'title' => 'Miami / South Florida, FL',
 	  'distance' => 26
     ),
-    'Florida Keys, FL' => array(
-	  'subdomain' => 'keys',
+    'keys' => array(
+	  'title' => 'Florida Keys, FL',
 	  'distance' => 73
     ),
-    'Treasure Coast, FL' => array(
-	  'subdomain' => 'treasure',
+    'treasure' => array(
+	  'title' => 'Treasure Coast, FL',
 	  'distance' => 84
     ),
-    'Heartland Florida, FL' => array(
-	  'subdomain' => 'cfl',
+    'cfl' => array(
+	  'title' => 'Heartland Florida, FL',
 	  'distance' => 89
     ),
-    'Ft Myers / SW Florida, FL' => array(
-	  'subdomain' => 'fortmyers',
+    'fortmyers' => array(
+	  'title' => 'Ft Myers / SW Florida, FL',
 	  'distance' => 113
     ),
-    'Space Coast, FL' => array(
-	  'subdomain' => 'spacecoast',
+    'spacecoast' => array(
+	  'title' => 'Space Coast, FL',
 	  'distance' => 169
     ),
-    'Sarasota-Bradenton, FL' => array(
-	  'subdomain' => 'sarasota',
+    'sarasota' => array(
+	  'title' => 'Sarasota-Bradenton, FL',
 	  'distance' => 170
     ),
-    'Lakeland, FL' => array(
-	  'subdomain' => 'lakeland',
+    'lakeland' => array(
+	  'title' => 'Lakeland, FL',
 	  'distance' => 172
     ),
-    'Orlando, FL' => array(
-	  'subdomain' => 'orlando',
+    'orlando' => array(
+	  'title' => 'Orlando, FL',
 	  'distance' => 183
     ),
-    'Tampa Bay Area, FL' => array(
-	  'subdomain' => 'tampa',
+    'tampa' => array(
+	  'title' => 'Tampa Bay Area, FL',
 	  'distance' => 190
     ),
-    'Daytona Beach, FL' => array(
-	  'subdomain' => 'daytona',
+    'daytona' => array(
+	  'title' => 'Daytona Beach, FL',
 	  'distance' => 219
     ),
-    'Ocala, FL' => array(
-	  'subdomain' => 'ocala',
+    'ocala' => array(
+	  'title' => 'Ocala, FL',
 	  'distance' => 244
     ),
-    'Gainesville, FL' => array(
-	  'subdomain' => 'gainesville',
+    'gainesville' => array(
+	  'title' => 'Gainesville, FL',
 	  'distance' => 277
     ),
-    'St Augustine, FL' => array(
-	  'subdomain' => 'staugustine',
+    'staugustine' => array(
+	  'title' => 'St Augustine, FL',
 	  'distance' => 291
     ),
-    'Jacksonville, FL' => array(
-	  'subdomain' => 'jacksonville',
+    'jacksonville' => array(
+	  'title' => 'Jacksonville, FL',
 	  'distance' => 304
     ),
-    'North Central FL, FL' => array(
-	  'subdomain' => 'lakecity',
+    'lakecity' => array(
+	  'title' => 'North Central FL, FL',
 	  'distance' => 319
     ),
 );
@@ -159,7 +159,7 @@ $new_posts = array();
 $delay_remainder = 0;
 $standard_page_delay = round(($config['total_delay'] - $config['start_delay']) / count($config['cities']));
 log('Standard page delay: ' . $standard_page_delay);
-foreach ($config['cities'] as $city_name => $city) {
+foreach ($config['cities'] as $subdomain => $city) {
 	// Calculate semi-random delays between page visits.
 	if (end($config['cities']) != $city) {
 		$random_delay = mt_rand(10, $standard_page_delay);
@@ -175,6 +175,7 @@ foreach ($config['cities'] as $city_name => $city) {
 	}
 	if (!$config['debug']) {
 		sleep($page_delay);
+		//sleep(2);
 	}
 	
 	// Skip cities too far away.
@@ -183,7 +184,7 @@ foreach ($config['cities'] as $city_name => $city) {
 		continue;
 	}
 	
-	$url_base = str_replace('[subdomain]', $city['subdomain'], $config['url_base']);
+	$url_base = str_replace('[subdomain]', $subdomain, $config['url_base']);
 	$url = $url_base . $config['url_path'];
 	log('Fetching URL: ' . $url);
 	$ch = curl_init();
@@ -212,12 +213,12 @@ foreach ($config['cities'] as $city_name => $city) {
 	}
 	
 	if ($config['log_level'] == 'verbose') {
-		$last_index_fn = $config['data_folder'] . '/index_' . $city['subdomain'] . '.html';
+		$last_index_fn = $config['data_folder'] . '/index_' . $subdomain . '.html';
 		file_put_contents($last_index_fn, $request_data . $index_data);
 		chmod($last_index_fn, 0776);
 	}
 	
-	$pattern = '/<p\s+class="row"\s+data-pid="(\d+)">.+?(?:<a[^>]+?data-ids="([^"]+)".+?)?<time\s+datetime="([^"]+)"\s+title="([^"]+)".+?<a.+?href="([^"]+)"[^>]+>([^<]+).+?(?:<small>\s*\(([^)]+).+?)?<\/p>/i';
+	$pattern = '/<p[^>]+?class="row"[^>]+?data-pid="(\d+)"[^>]*?>.+?(?:<a[^>]+?data-ids="([^"]+)".+?)?<time[^>]+?datetime="([^"]+)"[^>]*?title="([^"]+)".+?<a[^>]*?href="([^"]+)"[^>]+>([^<]+).+?(?:<small>\s*\(([^)]+).+?)?<\/p>/i';
 	$match_result = preg_match_all($pattern, $index_data, $matches);
 	if ($match_result  === false) {
 		reportError('Failed to match pattern: ' . $url, $index_data);
@@ -268,13 +269,19 @@ foreach ($config['cities'] as $city_name => $city) {
 		}
 		log('URL fix: ' . $post_url . ' / ' . $fixed_post_url);
 		
-		preg_match('/http:\/\/([^\.]+)\./', $post_url, $post_city);
+		preg_match('/http:\/\/([^\.]+)\./', $fixed_post_url, $post_subdomain);
+		$post_city = $config['cities'][$post_subdomain[1]];
 
 		$post_images = [];
 		if (strlen($post_image_ids)) {
 			$post_images = array_map(function($val) {
 				return 'http://images.craigslist.org/' . substr(trim($val), 2) . '_600x450.jpg';
 			}, explode(',', $post_image_ids));
+		}
+
+		$is_local = false;
+		if (isset($config['local_subdomain']) && $config['local_subdomain'] == $post_subdomain[1]) {
+			$is_local = true;
 		}
 		
 		$new_cache[] = $post_id;
@@ -283,71 +290,70 @@ foreach ($config['cities'] as $city_name => $city) {
 		    'time_str' => $post_date_str,
 		    'url' => $fixed_post_url,
 		    'title' => $post_title,
-		    'location' => $post_location,
-		    'site' => $post_city[1],
-		    'distance' => $city['distance'],
-		    'images' => $post_images
+		    'location' => ($post_location)? $post_location : '(none)',
+		    'site' => $post_city['title'] . ' (' . $post_subdomain[1] . ')',
+		    'distance' => $post_city['distance'],
+		    'images' => $post_images,
+		    'is_local' => $is_local
 		);
 	}
 }
 log('Posts macthed: ' . print_r($new_posts, true));
 log('Posts cached: ' . print_r($new_cache, true));
 
-if (!(@file_put_contents($cache_fn, json_encode($new_cache)))) {
-	reportError('Could not save cache.', false, true);
-}
-
-if (!isset($config['debug']) || $config['debug'] == false) {
-	if ($first_run) {
-		log('Exiting due to first run, building cache.');
-		exit;
-	}
-}
-else {
+if (isset($config['debug']) && $config['debug'] == true) {
 	log('Exiting due to test mode. Skipping notifications');
 	die(json_encode($new_posts));
 }
-
-// Notify about new posts.
-log('Starting notifications.');
-$mail_log = $config['data_folder'] . '/mail.log';
-if (!file_exists($mail_log)) {
-	log('Mail log not does not exist. Creating.');
-	touch($mail_log);
-	chmod($mail_log, 0776);
+else if ($first_run) {
+	log('Skipped notifications due to first run, building cache.');
 }
-foreach ($new_posts as $post) {
-	log('Starting message.');
-	$message = '';
-	$message .= "<br />Time: {$post['time_str']}<br />"
-				. "Site: {$post['site']}<br />"
-				. "Distance: {$post['distance']}<br />"
-				. "Location: {$post['location']}<br />"
-				. '<br />';
-	
-	if ($post['images']) {
-		foreach($post['images'] as $image) {
-			$message .= "<a href='{$post['url']}'><img src='{$image}' /></a>";
+else {
+	// Notify about new posts.
+	log('Starting notifications.');
+	$mail_log = $config['data_folder'] . '/mail.log';
+	if (!file_exists($mail_log)) {
+		log('Mail log not does not exist. Creating.');
+		touch($mail_log);
+		chmod($mail_log, 0776);
+	}
+	foreach ($new_posts as $post) {
+		log('Starting message.');
+		$message = '';
+		$message .= "<br />Time: {$post['time_str']}<br />"
+					. "Site: {$post['site']}<br />"
+					. "Distance: {$post['distance']}<br />"
+					. "Location: {$post['location']}<br />"
+					. '<br />';
+		
+		if ($post['images']) {
+			foreach($post['images'] as $image) {
+				$message .= "<a href='{$post['url']}'><img src='{$image}' /></a>";
+			}
+			log('Images found.');
 		}
-		log('Images found.');
+		else {
+			$message .= "<a href='{$post['url']}'>{$post['url']}</a>";
+			log('No images found.');
+		}
+		
+		$subject = 'CL: ' . (($post['is_local'])? 'Local: ' : '') . $post['title'];
+		$log_entry =	'Subject: ' . $subject . "\n" .
+					'Date: ' . date('r') . "\n" .
+					'Message: ' . $message . "\n" .
+					 str_repeat('_', 50) . "\n";
+		log('Message (' . $subject . '): ' . $message);
+		if (!(@file_put_contents($mail_log, $log_entry, FILE_APPEND))) {
+			reportError('Could not write to mail log: ' . $subject, $message);
+		}
+		if (!mail($config['notify_email'], $subject, $message,	"From: CL Notifier <{$config['from_email']}>\r\n" .
+											"MIME-Version: 1.0\r\n" . 
+											"Content-type: text/html; charset=iso-8859-1\r\n")) {
+			reportError('Email could not be sent: ' . $subject, $message);
+		}
 	}
-	else {
-		$message .= "<a href='{$post['url']}'>{$post['url']}</a>";
-		log('No images found.');
-	}
-	
-	$subject = 'CL: ' . $post['title'];
-	$log_entry =	'Subject: ' . $subject . "\n" .
-				'Date: ' . date('r') . "\n" .
-				'Message: ' . $message . "\n" .
-				 str_repeat('_', 50) . "\n";
-	log('Message (' . $subject . '): ' . $message);
-	if (!(@file_put_contents($mail_log, $log_entry, FILE_APPEND))) {
-		reportError('Could not write to mail log: ' . $subject, $message);
-	}
-	if (!mail($config['notify_email'], $subject, $message,	"From: CL Notifier <{$config['from_email']}>\r\n" .
-										"MIME-Version: 1.0\r\n" . 
-										"Content-type: text/html; charset=iso-8859-1\r\n")) {
-		reportError('Email could not be sent: ' . $subject, $message);
-	}
+}
+
+if (!(@file_put_contents($cache_fn, json_encode($new_cache)))) {
+	reportError('Could not save cache.', false, true);
 }
