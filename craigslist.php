@@ -100,8 +100,8 @@ function reportError($message, $data = false, $stop_exit = false) {
 	global $config;
 	$message .= "\n";
 	echo $message;
-	// $stderr = fopen('php://stderr', 'w');
-	// fwrite($stderr, $message);
+	$stderr = fopen('php://stderr', 'w');
+	fwrite($stderr, $message);
 	$error_log = $config['data_folder'] . '/errors.txt';
 	file_put_contents($error_log, 'Date: ' . date('r') . "\n" .
 						'Message: ' . $message .
@@ -152,6 +152,13 @@ else {
 	else {
 		reportError('Max execution not set properly.', false, true);
 	}
+}
+
+// Get current posts file.
+$current_posts_file = '/var/www/reposter/cache/current_posts.json';
+$current_posts = [];
+if (file_exists($current_posts_file) && is_readable($current_posts_file)) {
+	$current_posts = json_decode(file_get_contents('/var/www/reposter/cache/current_posts.json'), true);
 }
 
 // Get list of new posts.
@@ -220,11 +227,11 @@ foreach ($config['cities'] as $subdomain => $city) {
 	
 	$pattern = '/<p[^>]+?class="row"[^>]+?data-pid="(\d+)"[^>]*?>.+?(?:<a[^>]+?data-ids="([^"]+)".+?)?<time[^>]+?datetime="([^"]+)"[^>]*?title="([^"]+)".+?<a[^>]*?href="([^"]+)"[^>]+>([^<]+).+?(?:<small>\s*\(([^)]+).+?)?<\/p>/i';
 	$match_result = preg_match_all($pattern, $index_data, $matches);
-	if ($match_result  === false) {
+	if ($match_result === false && !count($matches[1]) && !strstr($index_data, 'Nothing found for that search. (All words must match.)')) {
 		reportError('Failed to match pattern: ' . $url, $index_data);
 	}
-	if (!$match_result || !count($matches[1])) {
-		reportError('No matches in the results: ' . $url, $index_data);
+	if (!count($matches[1])) {
+		log('No matches in the results: ' . $url);
 	}
 	unset($matches[0]);
 	log('Macthes: ' . print_r($matches));
@@ -238,6 +245,14 @@ foreach ($config['cities'] as $subdomain => $city) {
 		$post_url = $matches[5][$i];
 		$post_title = $matches[6][$i];
 		$post_location = $matches[7][$i];
+
+		// If post is one of mine.
+		foreach ($dog_posts as $current_posts) {
+			if (in_array($post_id, $dog_posts)) {
+				log('Post macthes listing managed by this script.');
+				continue;
+			}
+		}
 		
 		// If post is too old.
 		$post_datetime = new \DateTime($post_date);
