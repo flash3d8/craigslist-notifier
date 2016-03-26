@@ -225,16 +225,15 @@ foreach ($config['cities'] as $subdomain => $city) {
 		chmod($last_index_fn, 0776);
 	}
 	
-	$pattern = '/<p[^>]+?class="row"[^>]+?data-pid="(\d+)"[^>]*?>.+?(?:<a[^>]+?data-ids="([^"]+)".+?)?<time[^>]+?datetime="([^"]+)"[^>]*?title="([^"]+)".+?<a[^>]*?href="([^"]+)"[^>]+>([^<]+).+?(?:<small>\s*\(([^)]+).+?)?<\/p>/i';
+	$pattern = '/<p[^>]+?class="row"[^>]+?data-pid="(\d+)"[^>]*?>.+?(?:<a[^>]+?data-ids="([^"]+)".+?)?<time[^>]+?datetime="([^"]+)"[^>]*?title="([^"]+)".+?<a[^>]*?href="([^"]+)"[^>]+>(?:<span[^>]*>)([^<]+).+?(?:<small>\s*\(([^)]+).+?)?<\/p>/i';
 	$match_result = preg_match_all($pattern, $index_data, $matches);
-	if ($match_result === false && !count($matches[1]) && !strstr($index_data, 'Nothing found for that search. (All words must match.)')) {
-		reportError('Failed to match pattern: ' . $url, $index_data);
+	if ($match_result === false && !count($matches[1]) && !strstr($index_data, 'Nothing found for that search.')) {
+		reportError('Failed to match pattern: ' . $url, $index_data, true);
 	}
 	if (!count($matches[1])) {
 		log('No matches in the results: ' . $url);
 	}
 	unset($matches[0]);
-	log('Macthes: ' . print_r($matches));
 	
 	log('Filtering posts: ' . count($matches[1]));
 	for ($i = 0; $i < count($matches[1]); $i++) {
@@ -247,7 +246,7 @@ foreach ($config['cities'] as $subdomain => $city) {
 		$post_location = $matches[7][$i];
 
 		// If post is one of mine.
-		foreach ($dog_posts as $current_posts) {
+		foreach ($current_posts as $dog_posts) { 
 			if (in_array($post_id, $dog_posts)) {
 				log('Post macthes listing managed by this script.');
 				continue;
