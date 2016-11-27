@@ -216,7 +216,7 @@ foreach ($config['cities'] as $subdomain => $city) {
 	$request_data = curl_getinfo($ch, CURLINFO_HEADER_OUT);
 	curl_close($ch);
 	if (!$index_data || !strlen($index_data)) {
-		reportError('Failed to get post index: ' . $url);
+		reportError('Failed to get post index: ' . $url, null, true);
 	}
 	
 	if ($config['log_level'] == 'verbose') {
