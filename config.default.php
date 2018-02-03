@@ -1,15 +1,15 @@
 <?php
 
-$config['query'] = 'horrible trash';
-$config['host'] = 'craigslist.org';
-$config['url_base'] = 'http://[subdomain].' . $config['host'];
-$config['url_path'] = '/search/zip?query=' . $config['query'];
+$config['queries'] = [
+	'search1' => '/search/zip?query=' . urlencode('')
+];
 
 $config['search_distance'] = 400;
 $config['search_interval'] = 600;
 $config['randomize_interval'] = true;
 $config['days_old'] = 7;
 $config['max_execution'] = 900;
+$config['local_subdomain'] = 'miami';
 $config['total_delay'] = 400;
 $config['start_delay'] = 150;
 $config['data_folder'] = 'cl_data';

@@ -8,6 +8,8 @@
 
 namespace waffley;
 
+include_once('vendor/autoload.php');
+
 // Config.
 $config = array();
 $config['cities'] = array(
@@ -99,7 +101,6 @@ ini_set('max_execution_time', $config['max_execution']);
 function reportError($message, $data = false, $stop_exit = false) {
 	global $config;
 	$message .= "\n";
-	echo $message;
 	$stderr = fopen('php://stderr', 'w');
 	fwrite($stderr, $message);
 	$error_log = $config['data_folder'] . '/errors.txt';
@@ -166,150 +167,183 @@ $new_posts = array();
 $delay_remainder = 0;
 $standard_page_delay = round(($config['total_delay'] - $config['start_delay']) / count($config['cities']));
 log('Standard page delay: ' . $standard_page_delay);
-foreach ($config['cities'] as $subdomain => $city) {
-	// Calculate semi-random delays between page visits.
-	if (end($config['cities']) != $city) {
-		$random_delay = mt_rand(10, $standard_page_delay);
-	}
-	else {
-		$random_delay = $standard_page_delay;
-	}
-	$page_delay = $random_delay + $delay_remainder;
-	log('Page delay: ' . $page_delay);
-	if ($page_delay < $standard_page_delay) {
-		$delay_remainder = $standard_page_delay - $page_delay;
-		log('Delay remainder: ' . $delay_remainder);
-	}
-	if (!$config['debug']) {
-		sleep($page_delay);
-		//sleep(2);
-	}
-	
-	// Skip cities too far away.
-	if ($city['distance'] > $config['search_distance']) {
-		log('Skipping city because outside search radius: ' . $city['distance'] . ' / ' . $config['search_distance']);
-		continue;
-	}
-	
-	$url_base = str_replace('[subdomain]', $subdomain, $config['url_base']);
-	$url = $url_base . $config['url_path'];
-	log('Fetching URL: ' . $url);
-	$ch = curl_init();
-	curl_setopt($ch, CURLOPT_URL, $url);
-	curl_setopt($ch, CURLOPT_USERAGENT, $config['user_agent']);
-	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-	curl_setopt($ch, CURLOPT_ENCODING, 'gzip');
-	curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-	    'Connection: keep-alive',
-	    'Pragma: no-cache',
-	    'Cache-Control: no-cache',
-	    'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-	    'DNT: 1',
-	    'Accept-Encoding: gzip,deflate,sdch',
-	    'Accept-Language: en-US,en;q=0.8',
-	));
-	if ($config['log_level'] == 'verbose') {
-		curl_setopt($ch, CURLINFO_HEADER_OUT, true);
-	}
-	$index_data = curl_exec($ch);
-	$request_data = curl_getinfo($ch, CURLINFO_HEADER_OUT);
-	curl_close($ch);
-	if (!$index_data || !strlen($index_data)) {
-		reportError('Failed to get post index: ' . $url, null, true);
-	}
-	
-	if ($config['log_level'] == 'verbose') {
-		$last_index_fn = $config['data_folder'] . '/index_' . $subdomain . '.html';
-		file_put_contents($last_index_fn, $request_data . $index_data);
-		chmod($last_index_fn, 0776);
-	}
-	
-	$pattern = '/<p[^>]+?class="row"[^>]+?data-pid="(\d+)"[^>]*?>.+?(?:<a[^>]+?data-ids="([^"]+)".+?)?<time[^>]+?datetime="([^"]+)"[^>]*?title="([^"]+)".+?<a[^>]*?href="([^"]+)"[^>]+>(?:<span[^>]*>)([^<]+).+?(?:<small>\s*\(([^)]+).+?)?<\/p>/i';
-	$match_result = preg_match_all($pattern, $index_data, $matches);
-	if ($match_result === false && !count($matches[1]) && !strstr($index_data, 'Nothing found for that search.')) {
-		reportError('Failed to match pattern: ' . $url, $index_data, true);
-	}
-	if (!count($matches[1])) {
-		log('No matches in the results: ' . $url);
-	}
-	unset($matches[0]);
-	
-	log('Filtering posts: ' . count($matches[1]));
-	for ($i = 0; $i < count($matches[1]); $i++) {
-		$post_id = $matches[1][$i];
-		$post_image_ids = $matches[2][$i];
-		$post_date = $matches[3][$i];
-		$post_date_str = $matches[4][$i];
-		$post_url = $matches[5][$i];
-		$post_title = $matches[6][$i];
-		$post_location = $matches[7][$i];
+foreach ($config['searches'] as $search_name => $search) {
+	$cities = (isset($search['cities'])) ? $search['cities'] : $config['cities'];
 
-		// If post is one of mine.
-		foreach ($current_posts as $dog_posts) { 
-			if (in_array($post_id, $dog_posts)) {
-				log('Post macthes listing managed by this script.');
-				continue;
+	foreach ($cities as $subdomain => $city) {
+		if ( ! is_array($city)) {
+			$subdomain = $city;
+			$city = $config['cities'][$city];
+		}
+
+		// Calculate semi-random delays between page visits.
+		$random_delay = 2;
+		if ($standard_page_delay > 2) {
+			if (end($config['cities']) != $city) {
+				$random_delay = mt_rand(2, $standard_page_delay);
+			}
+			else {
+				$random_delay = $standard_page_delay;
 			}
 		}
+		$page_delay = $random_delay + $delay_remainder;
+		log('Page delay: ' . $page_delay);
+		if ($page_delay < $standard_page_delay) {
+			$delay_remainder = $standard_page_delay - $page_delay;
+			log('Delay remainder: ' . $delay_remainder);
+		}
+		if ( ! $config['debug']) {
+			sleep($page_delay);
+		}
 		
-		// If post is too old.
-		$post_datetime = new \DateTime($post_date);
-		$post_interval = $post_datetime->diff(new \DateTime('now'))->format('%a');
-		if ($config['days_old'] <= $post_interval) {
-			log('Post too old: ' . $config['days_old'] . ' / ' . $post_interval . ' / ' . $post_id);
+		// Skip cities too far away.
+		if ($city['distance'] > $config['search_distance']) {
+			log('Skipping city because outside search radius: ' . $city['distance'] . ' / ' . $config['search_distance']);
 			continue;
 		}
 		
-		// If already notified about this post.
-		if (!isset($config['cache_disabled']) || $config['cache_disabled'] == true) {
-			if (in_array($post_id, $cache)) {
-				log('Post already in cache: ' . $post_id);
-				$new_cache[] = $post_id;
+		$url_base = str_replace('[subdomain]', $subdomain, 'https://[subdomain].craigslist.org');
+		$url = $url_base . $search['query'];
+		log('Fetching URL: ' . $url);
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL, $url);
+		curl_setopt($ch, CURLOPT_USERAGENT, $config['user_agent']);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_ENCODING, 'gzip');
+		curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+		    'Connection: keep-alive',
+		    'Pragma: no-cache',
+		    'Cache-Control: no-cache',
+		    'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+		    'DNT: 1',
+		    'Accept-Encoding: gzip,deflate,sdch',
+		    'Accept-Language: en-US,en;q=0.8',
+		));
+		if ($config['log_level'] == 'verbose') {
+			curl_setopt($ch, CURLINFO_HEADER_OUT, true);
+		}
+		$index_data = curl_exec($ch);
+		$request_data = curl_getinfo($ch, CURLINFO_HEADER_OUT);
+		curl_close($ch);
+		if (!$index_data || !strlen($index_data)) {
+			reportError('Failed to get post index: ' . $url, null, true);
+		}
+		
+		if ($config['log_level'] == 'verbose') {
+			$last_index_fn = $config['data_folder'] . '/index_' . $subdomain . '.html';
+			file_put_contents($last_index_fn, $request_data . $index_data);
+			chmod($last_index_fn, 0776);
+		}
+		
+		/* $pattern = '/<p[^>]+?class="row"[^>]+?data-pid="(\d+)"[^>]*?>.+?(?:<a[^>]+?data-ids="([^"]+)".+?)?<time[^>]+?datetime="([^"]+)"[^>]*?title="([^"]+)".+?<a[^>]*?href="([^"]+)"[^>]+>(?:<span[^>]*>)([^<]+).+?(?:<small>\s*\(([^)]+).+?)?<\/p>/i';
+		$match_result = preg_match_all($pattern, $index_data, $matches);
+		if ($match_result === false && !count($matches[1]) && !strstr($index_data, 'Nothing found for that search.')) {
+			reportError('Failed to match pattern: ' . $url, $index_data, true);
+		}
+		if (!count($matches[1])) {
+			log('No matches in the results: ' . $url);
+		}
+		unset($matches[0]); */
+
+		$search_results = html5qp($index_data, '#sortable-results > ul.rows > li');
+		
+		log('Filtering posts: ' . $search_results->size());
+		foreach ($search_results as $i => $search_result) {
+			$post_id = $search_result->attr('data-pid');
+			$post_image_ids = $search_result->find('.result-image')->attr('data-ids');
+			$post_date = $search_result->find('time')->attr('datetime');
+			$post_date_str = $search_result->find('time')->attr('title');
+			$post_url = $search_result->find('.result-title')->attr('href');
+			$post_title = $search_result->find('.result-title')->text();
+			$post_location = trim(substr($search_result->find('.result-hood')->text(), 2, -1));
+
+			log('#####post_id: ' . $post_id);
+			log('post_image_ids: ' . $post_image_ids);
+			log('post_date: ' . $post_date);
+			log('post_date_str: ' . $post_date_str);
+			log('post_url: ' . $post_url);
+			log('post_title: ' . $post_title);
+			log('post_location: ' . $post_location);
+
+			// If post is created by the poster script.
+			foreach ($current_posts as $category) {
+				foreach ($category as $post_cache) {
+					if (in_array($post_id, $post_cache)) {
+						log('Post macthes listing managed by this script.');
+						continue;
+					}
+				} 
+				
+			}
+			
+			// If post is too old.
+			$post_datetime = new \DateTime($post_date);
+			$post_interval = $post_datetime->diff(new \DateTime('now'))->format('%a');
+			if ($config['days_old'] <= $post_interval) {
+				log('Post too old: ' . $config['days_old'] . ' / ' . $post_interval . ' / ' . $post_id);
 				continue;
 			}
-			if (in_array($post_id, $new_cache)) {
-				log('Post already found in another site: ' . $post_id);
-				continue;
+			
+			// If already notified about this post.
+			if (!isset($config['cache_disabled']) || $config['cache_disabled'] == true) {
+				if (isset($new_cache[$search_name]) && in_array($post_id, $new_cache[$search_name])) {
+					log('Post already found in another site: ' . $post_id);
+					continue;
+				}
+				if (isset($cache[$search_name]) && in_array($post_id, $cache[$search_name])) {
+					log('Post already in cache: ' . $post_id);
+					$new_cache[$search_name][] = $post_id;
+					continue;
+				}
 			}
-		}
-		log('Post passed filters: ' . $post_id);
-		
-		if (!strstr($post_url, '//')) {
-			$fixed_post_url = $url_base . $post_url;
-		}
-		else {
-			$fixed_post_url = 'http:' . $post_url;
-		}
-		log('URL fix: ' . $post_url . ' / ' . $fixed_post_url);
-		
-		preg_match('/http:\/\/([^\.]+)\./', $fixed_post_url, $post_subdomain);
-		$post_city = $config['cities'][$post_subdomain[1]];
+			log('Post passed filters: ' . $post_id);
+			
+			if (!strstr($post_url, '//')) {
+				$fixed_post_url = $url_base . $post_url;
+			}
+			else {
+				$fixed_post_url = $post_url;
+			}
+			log('URL fix: ' . $post_url . ' / ' . $fixed_post_url);
+			
+			preg_match('/https?:\/\/([^\.]+)\./', $fixed_post_url, $post_subdomain);
+			if (isset($config['cities'][$post_subdomain[1]])) {
+				$post_city = $config['cities'][$post_subdomain[1]];
+			}
+			else {
+				$post_city = [
+					'title' => $post_subdomain[1],
+					'distance' => '?'
+				];
+			}
 
-		$post_images = [];
-		if (strlen($post_image_ids)) {
-			$post_images = array_map(function($val) {
-				return 'http://images.craigslist.org/' . substr(trim($val), 2) . '_600x450.jpg';
-			}, explode(',', $post_image_ids));
-		}
+			$post_images = [];
+			if (strlen($post_image_ids)) {
+				$post_images = array_map(function($val) {
+					return 'http://images.craigslist.org/' . substr(trim($val), 2) . '_600x450.jpg';
+				}, explode(',', $post_image_ids));
+			}
 
-		$is_local = false;
-		if (isset($config['local_subdomain']) && $config['local_subdomain'] == $post_subdomain[1]) {
-			$is_local = true;
+			$is_local = false;
+			if (isset($config['local_subdomain']) && $config['local_subdomain'] == $post_subdomain[1]) {
+				$is_local = true;
+			}
+			
+			$new_cache[$search_name][] = $post_id;
+			$new_posts[$post_id] = array(
+			    'time' => $post_datetime,
+			    'time_str' => $post_date_str,
+			    'url' => $fixed_post_url,
+			    'title' => $post_title,
+			    'location' => ($post_location)? $post_location : '(none)',
+			    'site' => $post_city['title'] . ' (' . $post_subdomain[1] . ')',
+			    'distance' => $post_city['distance'],
+			    'images' => $post_images,
+			    'is_local' => $is_local,
+			    'search_name' => $search_name
+			);
 		}
-		
-		$new_cache[] = $post_id;
-		$new_posts[$post_id] = array(
-		    'time' => $post_datetime,
-		    'time_str' => $post_date_str,
-		    'url' => $fixed_post_url,
-		    'title' => $post_title,
-		    'location' => ($post_location)? $post_location : '(none)',
-		    'site' => $post_city['title'] . ' (' . $post_subdomain[1] . ')',
-		    'distance' => $post_city['distance'],
-		    'images' => $post_images,
-		    'is_local' => $is_local
-		);
 	}
 }
 log('Posts macthed: ' . print_r($new_posts, true));
@@ -351,7 +385,7 @@ else {
 			log('No images found.');
 		}
 		
-		$subject = 'CL: ' . (($post['is_local'])? 'Local: ' : '') . $post['title'];
+		$subject = 'CL: [' . $post['search_name'] . '] ' . (($post['is_local'])? '[Local] ' : '') . $post['title'];
 		$log_entry =	'Subject: ' . $subject . "\n" .
 					'Date: ' . date('r') . "\n" .
 					'Message: ' . $message . "\n" .

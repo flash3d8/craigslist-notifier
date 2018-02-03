@@ -1,0 +1,15 @@
+{
+  "name": "flash3d8/craigslist-notifier",
+  "description": "Notifies on search results for Craigslist ads automatically.",
+  "minimum-stability": "dev",
+  "license": "GPL-3.0L",
+  "authors": [
+    {
+      "name": "Jacob Wolowitz",
+      "email": "me@jacob-w.com"
+    }
+  ],
+  "require": {
+    "querypath/QueryPath": "dev-master"
+  }
+}

@@ -2,3 +2,5 @@
 config.php
 cl_data
 cl_log.txt
+vendor/
+**/.DS_Store
